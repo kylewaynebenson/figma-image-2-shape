@@ -1,6 +1,6 @@
 {
   "name": "Image 2 Shape Mosaic Generator",
-  "id": "mosaic-figma-plugin",
+  "id": "image-2-shape-figma-plugin",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "ui.html",

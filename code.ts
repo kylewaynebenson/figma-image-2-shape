@@ -8,6 +8,7 @@ interface MosaicConfig {
   imageTransparencyIsWhite: boolean;
   imageDuotone: boolean; // Limit to black and white
   colorLimit: number; // Number of colors to limit to
+  colorSet: string; // "BW", "CMYK", "RGB", or "Sampled"
   groupColors: boolean; // Group shapes with matching colors in unions
   tileSizeBase?: number;
   duotoneColors?: { dark: { r: number, g: number, b: number }, light: { r: number, g: number, b: number } };
@@ -205,6 +206,66 @@ function extractColorPalette(imageData: CellData[][], maxColors: number): Array<
     .map(entry => entry.color);
   
   return sortedColors;
+}
+
+// Helper function to sample extreme colors from RAW image bytes (for variety)
+async function sampleExtremeColors(bytes: Uint8Array, maxColors: number): Promise<Array<{ r: number, g: number, b: number }>> {
+  // Send to UI to sample from raw pixels
+  return new Promise((resolve) => {
+    const handler = (msg: any) => {
+      if (msg.type === 'sampled-colors-result') {
+        figma.ui.off('message', handler);
+        resolve(msg.colors);
+      }
+    };
+    
+    figma.ui.on('message', handler);
+    
+    figma.ui.postMessage({
+      type: 'sample-extreme-colors',
+      bytes,
+      maxColors
+    });
+  });
+}
+
+// Helper function to get preset color palettes
+function getPresetPalette(paletteType: string, colorLimit: number): Array<{ r: number, g: number, b: number }> {
+  if (paletteType === 'BW') {
+    return [
+      { r: 0, g: 0, b: 0 },   // Black
+      { r: 1, g: 1, b: 1 }    // White
+    ];
+  } else if (paletteType === 'CMYK') {
+    const base = [
+      { r: 0, g: 1, b: 1 },   // Cyan
+      { r: 1, g: 0, b: 1 },   // Magenta
+      { r: 1, g: 1, b: 0 },   // Yellow
+      { r: 0, g: 0, b: 0 }    // Black (Key)
+    ];
+    // Pad with white if needed
+    while (base.length < colorLimit) {
+      base.push({ r: 1, g: 1, b: 1 });
+    }
+    return base.slice(0, colorLimit);
+  } else if (paletteType === 'RGB') {
+    const base = [
+      { r: 1, g: 0, b: 0 },   // Red
+      { r: 0, g: 1, b: 0 },   // Green
+      { r: 0, g: 0, b: 1 },   // Blue
+      { r: 0, g: 0, b: 0 },   // Black
+      { r: 1, g: 1, b: 1 }    // White
+    ];
+    // Pad with grays if needed
+    while (base.length < colorLimit) {
+      const gray = base.length / (colorLimit + 1);
+      base.push({ r: gray, g: gray, b: gray });
+    }
+    return base.slice(0, colorLimit);
+  }
+  
+  // Default fallback
+  return [{ r: 0, g: 0, b: 0 }, { r: 1, g: 1, b: 1 }];
 }
 
 // Helper function to find closest color in palette
@@ -530,9 +591,24 @@ async function createMosaic(
       };
       console.log(`Duotone mode: Using pure black and white`);
     } else if (config.colorLimit && config.colorLimit > 0 && config.colorLimit < 256) {
-      // Extract limited color palette
-      config.limitedPalette = extractColorPalette(imageData, config.colorLimit);
-      console.log(`Color limiting enabled: Using ${config.limitedPalette.length} colors`);
+      // Extract limited color palette based on colorSet
+      if (config.colorSet === 'Sampled') {
+        // Sample extreme colors from the raw image
+        const bytes = await selectedImage.exportAsync({
+          format: 'PNG',
+          constraint: { type: 'SCALE', value: 1 }
+        });
+        config.limitedPalette = await sampleExtremeColors(bytes, config.colorLimit);
+        console.log(`Color limiting: Sampled ${config.limitedPalette.length} extreme colors from image`);
+      } else if (config.colorSet === 'BW' || config.colorSet === 'CMYK' || config.colorSet === 'RGB') {
+        // Use preset palette
+        config.limitedPalette = getPresetPalette(config.colorSet, config.colorLimit);
+        console.log(`Color limiting: Using ${config.colorSet} preset with ${config.limitedPalette.length} colors`);
+      } else {
+        // Default: extract most frequent colors
+        config.limitedPalette = extractColorPalette(imageData, config.colorLimit);
+        console.log(`Color limiting: Using ${config.limitedPalette.length} most frequent colors`);
+      }
     }
     
     // Create a grid to track which cells are already filled
