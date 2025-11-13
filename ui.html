@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        :root {
+            --figma-color-bg: #ffffff;
+            --figma-color-text: #333333;
+            --figma-color-text-muted: #888888;
+            --figma-color-border: #e5e5e5;
+            --figma-color-hover: #f5f5f5;
+            --figma-color-primary: #18a0fb;
+            --figma-color-primary-hover: #0d8fe0;
+            --figma-radius: 6px;
+            --figma-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--figma-font);
+            font-size: 11px;
+            line-height: 16px;
+            color: var(--figma-color-text);
+            margin: 0;
+            padding: 8px;
+            width: 100%;
+            background-color: var(--figma-color-bg);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .section {
+            margin-bottom: 8px;
+        }
+
+        .section-title {
+            font-weight: 700;
+            font-size: 11px;
+            margin-bottom: 8px;
+            color: var(--figma-color-text);
+        }
+
+        .form-group {
+            margin-bottom: 8px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 4px;
+            font-weight: 500;
+            font-size: 11px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .checkbox-label:has(input:not(:checked)) {
+            color: var(--figma-color-text-muted);
+        }
+
+        .checkbox-label input {
+            margin-right: 6px;
+            width: auto;
+        }
+
+        input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 5px 8px;
+            font-size: 11px;
+            border: 1px solid var(--figma-color-border);
+            border-radius: var(--figma-radius);
+            background-color: var(--figma-color-bg);
+            height: 30px;
+            outline: none;
+            font-family: var(--figma-font);
+        }
+        input:focus, select:focus {
+            border-color: var(--figma-color-primary);
+        }
+
+        .row {
+            display: flex;
+            gap: 4px;
+        }
+
+        .col {
+            flex: 1;
+        }
+
+        .button {
+            width: 100%;
+            padding: 8px;
+            background-color: var(--figma-color-primary);
+            color: white;
+            border: none;
+            border-radius: var(--figma-radius);
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 11px;
+            height: 32px;
+            transition: background-color 0.2s;
+        }
+        .button.button-secondary {
+            background-color: var(--figma-color-hover);
+            color: var(--figma-color-text);
+            border: 1px solid var(--figma-color-border);
+        }
+
+        .button:hover {
+            background-color: var(--figma-color-primary-hover);
+        }
+
+        .divider {
+            height: 1px;
+            background-color: var(--figma-color-border);
+            margin: 12px 0;
+        }
+
+        .toggle-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            padding: 4px 0;
+            user-select: none;
+        }
+
+        .toggle-header:hover {
+            color: var(--figma-color-primary);
+        }
+
+        .toggle-icon {
+            font-size: 10px;
+            transition: transform 0.2s;
+        }
+
+        .toggle-content {
+            padding-top: 8px;
+            display: none;
+        }
+
+        .disabled-input {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .disabled-label {
+            opacity: 0.4;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="section">
+        <div class="form-group">
+            <label for="shape-type">Shape</label>
+            <select id="shape-type">
+                <option value="circle">Circle</option>
+                <option value="square">Square</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" id="image-transparency">
+                Input image alpha becomes white
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="image-duotone">
+                Input image is duotone (or dithered)
+            </label>
+        </div>
+        <div class="row">
+            <div class="col">
+                <div class="form-group">
+                    <label for="shape-size">Shape size</label>
+                    <input type="number" id="shape-size" value="20" min="1" max="100">
+                </div>
+            </div>
+            <div class="col">
+                <div class="form-group">
+                    <label for="tile-size">Shape variability</label>
+                        <select id="tile-size">
+                            <option value="1x">1x (uniform)</option>
+                            <option value="2x">1x, 2x (variable)</option>
+                            <option value="4x">1x, 2x, 4x (highly variable)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="color-limit">Colors</label>
+                <input type="number" id="color-limit" value="2" min="2" max="64">
+            </div>
+            <div class="form-group">
+                <label class="checkbox-label">
+                <input type="checkbox" id="group-colors">
+                Group matching colors in union
+            </label>
+            </div>
+        </div>
+    </div>
+    <button class="button button-primary" id="create-mosaic">Convert image</button>
+
+    <script>
+        // Enhanced function to calculate image brightness and color map
+        async function calculateImageData(bytes, gridSize, transparencyIsWhite = false) {
+            return new Promise((resolve, reject) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Create an image from the bytes
+                const blob = new Blob([bytes], { type: 'image/png' });
+                const url = URL.createObjectURL(blob);
+                const img = new Image();
+                
+                img.onload = () => {
+                    try {
+                        // Resize canvas to match image
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        
+                        // Draw the image on the canvas
+                        ctx.drawImage(img, 0, 0);
+                        
+                        // Get all image data at once (faster than multiple getImageData calls)
+                        const fullImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const data = fullImageData.data;
+                        
+                        // Calculate brightness and color for each grid cell
+                        const dataMap = [];
+                        const cellWidth = img.width / gridSize.width;
+                        const cellHeight = img.height / gridSize.height;
+                        
+                        for (let y = 0; y < gridSize.height; y++) {
+                            dataMap[y] = [];
+                            for (let x = 0; x < gridSize.width; x++) {
+                                // Sample a few pixels from this cell instead of all
+                                const centerX = Math.floor((x + 0.5) * cellWidth);
+                                const centerY = Math.floor((y + 0.5) * cellHeight);
+                                
+                                // Get pixel at cell center
+                                const idx = (centerY * img.width + centerX) * 4;
+                                const r = data[idx] / 255;
+                                const g = data[idx + 1] / 255;
+                                const b = data[idx + 2] / 255;
+                                const a = data[idx + 3] / 255;
+                                
+                                let avgR, avgG, avgB, avgBrightness;
+                                
+                                // Handle transparency
+                                if (a < 0.1) {
+                                    if (transparencyIsWhite) {
+                                        avgR = avgG = avgB = 1.0;
+                                        avgBrightness = 1.0;
+                                    } else {
+                                        avgR = avgG = avgB = 0.0;
+                                        avgBrightness = 0.0;
+                                    }
+                                } else {
+                                    avgR = r * a;
+                                    avgG = g * a;
+                                    avgB = b * a;
+                                    avgBrightness = (0.299 * r + 0.587 * g + 0.114 * b) * a;
+                                }
+                                
+                                // Store brightness and color data for this cell
+                                dataMap[y][x] = {
+                                    brightness: avgBrightness,
+                                    color: { r: avgR, g: avgG, b: avgB },
+                                    transparencyRatio: a < 0.1 ? 1 : 0
+                                };
+                            }
+                        }
+                        
+                        // Clean up
+                        URL.revokeObjectURL(url);
+                        
+                        // Return the data map
+                        resolve(dataMap);
+                    } catch (e) {
+                        URL.revokeObjectURL(url);
+                        reject(e);
+                    }
+                };
+                
+                img.onerror = (err) => {
+                    URL.revokeObjectURL(url);
+                    reject(err);
+                };
+                
+                img.src = url;
+            });
+        }
+
+        // Function to analyze image and detect optimal shape size
+        async function analyzeImagePattern(bytes, imageWidth, imageHeight, transparencyIsWhite = false) {
+            return new Promise((resolve, reject) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                const blob = new Blob([bytes], { type: 'image/png' });
+                const url = URL.createObjectURL(blob);
+                const img = new Image();
+                
+                img.onload = () => {
+                    try {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+                        
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const data = imageData.data;
+                        
+                        // Analyze for repeating patterns (useful for dithered images)
+                        let detectedSize = null;
+                        
+                        // Check for regular patterns in a sample row
+                        const midRow = Math.floor(canvas.height / 2);
+                        const rowStart = midRow * canvas.width * 4;
+                        
+                        // Look for repeating color changes that indicate tile size
+                        for (let testSize = 4; testSize <= 64; testSize++) {
+                            let matchCount = 0;
+                            
+                            // Check if this size repeats consistently
+                            for (let x = 0; x < Math.min(canvas.width - testSize * 2, 200); x += testSize) {
+                                const idx1 = rowStart + x * 4;
+                                const idx2 = rowStart + (x + testSize) * 4;
+                                
+                                // Compare colors
+                                const diff = Math.abs(data[idx1] - data[idx2]) +
+                                           Math.abs(data[idx1 + 1] - data[idx2 + 1]) +
+                                           Math.abs(data[idx1 + 2] - data[idx2 + 2]);
+                                
+                                if (diff < 30) { // Similar colors suggest pattern
+                                    matchCount++;
+                                }
+                            }
+                            
+                            // If we found consistent repetition, this might be our size
+                            if (matchCount > 3) {
+                                detectedSize = testSize;
+                                break;
+                            }
+                        }
+                        
+                        URL.revokeObjectURL(url);
+                        
+                        // Scale back to original image size
+                        if (detectedSize) {
+                            // Account for the 0.5 scale we used
+                            const scaledSize = Math.round(detectedSize * 2);
+                            resolve(scaledSize);
+                        } else {
+                            // No clear pattern, use heuristic based on image size
+                            const avgDimension = (imageWidth + imageHeight) / 2;
+                            const optimalSize = Math.max(8, Math.min(32, Math.round(avgDimension / 30)));
+                            resolve(optimalSize);
+                        }
+                    } catch (e) {
+                        URL.revokeObjectURL(url);
+                        reject(e);
+                    }
+                };
+                
+                img.onerror = (err) => {
+                    URL.revokeObjectURL(url);
+                    reject(err);
+                };
+                
+                img.src = url;
+            });
+        }
+
+        // Handle messages from the plugin
+        window.onmessage = async (event) => {
+            const message = event.data.pluginMessage;
+            
+            // Handle get-pixel-dimensions request (fast!)
+            if (message.type === 'get-pixel-dimensions') {
+                const blob = new Blob([message.bytes], { type: 'image/png' });
+                const url = URL.createObjectURL(blob);
+                const img = new Image();
+                
+                img.onload = () => {
+                    const pixelWidth = img.naturalWidth || img.width;
+                    const pixelHeight = img.naturalHeight || img.height;
+                    URL.revokeObjectURL(url);
+                    
+                    parent.postMessage({
+                        pluginMessage: {
+                            type: 'pixel-dimensions-result',
+                            pixelWidth,
+                            pixelHeight
+                        }
+                    }, '*');
+                };
+                
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    parent.postMessage({
+                        pluginMessage: {
+                            type: 'pixel-dimensions-result',
+                            pixelWidth: 100,
+                            pixelHeight: 100
+                        }
+                    }, '*');
+                };
+                
+                img.src = url;
+            }
+            
+            // Handle refine-shape-size request (uses user hint to find optimal size)
+            if (message.type === 'refine-shape-size') {
+                const blob = new Blob([message.bytes], { type: 'image/png' });
+                const url = URL.createObjectURL(blob);
+                const img = new Image();
+                
+                img.onload = () => {
+                    const pixelWidth = img.naturalWidth || img.width;
+                    const pixelHeight = img.naturalHeight || img.height;
+                    const nodeWidth = message.nodeWidth;
+                    const nodeHeight = message.nodeHeight;
+                    const userHintSize = message.userHintSize;
+                    
+                    // Calculate exact size based on pixel dimensions
+                    const exactSize = nodeWidth / pixelWidth;
+                    
+                    // If user's hint is close to exact (within 20%), use exact
+                    // Otherwise, find the closest "nice" size near their hint
+                    let refinedSize;
+                    if (Math.abs(exactSize - userHintSize) / userHintSize < 0.2) {
+                        refinedSize = exactSize;
+                    } else {
+                        // User's hint might be targeting a different interpretation
+                        // Try to find a size that creates integer pixel counts near their hint
+                        const targetColumns = Math.round(nodeWidth / userHintSize);
+                        refinedSize = nodeWidth / targetColumns;
+                    }
+                    
+                    URL.revokeObjectURL(url);
+                    
+                    parent.postMessage({
+                        pluginMessage: {
+                            type: 'refined-shape-size-result',
+                            refinedSize
+                        }
+                    }, '*');
+                };
+                
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    // Fall back to user's hint
+                    parent.postMessage({
+                        pluginMessage: {
+                            type: 'refined-shape-size-result',
+                            refinedSize: message.userHintSize
+                        }
+                    }, '*');
+                };
+                
+                img.src = url;
+            }
+            
+            // Handle process-image request
+            if (message.type === 'process-image') {
+                try {
+                    const imageTransparencyIsWhite = message.imageTransparencyIsWhite || false;
+                    const dataMap = await calculateImageData(
+                        message.bytes,
+                        message.gridSize,
+                        imageTransparencyIsWhite
+                    );
+                    
+                    // Send result back to plugin
+                    parent.postMessage({
+                        pluginMessage: {
+                            type: 'image-data-result',
+                            dataMap
+                        }
+                    }, '*');
+                } catch (error) {
+                    console.error('Error processing image:', error);
+                    // Send a default brightness map
+                    const defaultMap = [];
+                    for (let y = 0; y < message.gridSize.height; y++) {
+                        defaultMap[y] = [];
+                        for (let x = 0; x < message.gridSize.width; x++) { // Fixed: x < message.gridSize.width
+                            defaultMap[y][x] = {
+                                brightness: 0.5,
+                                color: { r: 0.5, g: 0.5, b: 0.5 },
+                                transparencyRatio: 0
+                            };
+                        }
+                    }
+                    parent.postMessage({
+                        pluginMessage: {
+                            type: 'image-data-result',
+                            dataMap: defaultMap
+                        }
+                    }, '*');
+                }
+            }
+            
+            // Handle analyze-image-pattern request
+            if (message.type === 'analyze-image-pattern') {
+                try {
+                    const optimalSize = await analyzeImagePattern(
+                        message.bytes,
+                        message.imageWidth,
+                        message.imageHeight,
+                        message.imageTransparencyIsWhite
+                    );
+                    
+                    // Send result back to plugin
+                    parent.postMessage({
+                        pluginMessage: {
+                            type: 'pattern-analysis-result',
+                            optimalSize: optimalSize
+                        }
+                    }, '*');
+                } catch (error) {
+                    console.error('Error analyzing image pattern:', error);
+                    // Send default size
+                    parent.postMessage({
+                        pluginMessage: {
+                            type: 'pattern-analysis-result',
+                            optimalSize: 16
+                        }
+                    }, '*');
+                }
+            }
+        };
+    
+        // Handle duotone checkbox toggling
+        const duotoneCheckbox = document.getElementById('image-duotone');
+        const tileSizeSelect = document.getElementById('tile-size');
+        const colorLimitInput = document.getElementById('color-limit');
+        const tileSizeLabel = document.querySelector('label[for="tile-size"]');
+        const colorLimitLabel = document.querySelector('label[for="color-limit"]');
+
+        function updateInputStates() {
+            const isDuotone = duotoneCheckbox.checked;
+            
+            // Toggle disabled state (but NOT shape size - we want that editable)
+            tileSizeSelect.disabled = isDuotone;
+            colorLimitInput.disabled = isDuotone;
+            
+            // Toggle visual styling
+            if (isDuotone) {
+                tileSizeSelect.classList.add('disabled-input');
+                colorLimitInput.classList.add('disabled-input');
+                tileSizeLabel.classList.add('disabled-label');
+                colorLimitLabel.classList.add('disabled-label');
+            } else {
+                tileSizeSelect.classList.remove('disabled-input');
+                colorLimitInput.classList.remove('disabled-input');
+                tileSizeLabel.classList.remove('disabled-label');
+                colorLimitLabel.classList.remove('disabled-label');
+            }
+        }
+
+        duotoneCheckbox.addEventListener('change', updateInputStates);
+        // Initialize on page load
+        updateInputStates();
+
+        // Handle detected shape size message from plugin
+        window.addEventListener('message', (event) => {
+            const message = event.data.pluginMessage;
+            if (message.type === 'detected-shape-size') {
+                document.getElementById('shape-size').value = message.shapeSize;
+            }
+        });
+
+        // Update click handler to use shape size value
+        document.getElementById('create-mosaic').addEventListener('click', () => {
+            // Get the selected tile size option value
+            const tileSizeOption = document.getElementById('tile-size').value;
+            const shapeSize = parseInt(document.getElementById('shape-size').value);
+            const colorLimit = parseInt(document.getElementById('color-limit').value);
+            
+            const config = {
+                shapeSize: shapeSize, // Size of each shape in pixels
+                tileSizeVariation: tileSizeOption, // "1x", "2x", or "4x"
+                shapeType: document.getElementById('shape-type').value,
+                imageTransparencyIsWhite: document.getElementById('image-transparency').checked,
+                imageDuotone: document.getElementById('image-duotone').checked,
+                colorLimit: colorLimit, // Number of colors to limit to
+                groupColors: document.getElementById('group-colors').checked // Group matching colors in unions
+            };
+        
+            parent.postMessage({ 
+                pluginMessage: { 
+                    type: 'create-mosaic', 
+                    config 
+                } 
+            }, '*');
+        });
+    </script>
+</body>
+</html>
